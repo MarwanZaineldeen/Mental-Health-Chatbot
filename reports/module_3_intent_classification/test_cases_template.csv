@@ -1,0 +1,15 @@
+text,expected_intent
+hello,greeting
+good morning,greeting
+thank you so much,gratitude
+thanks that helped,gratitude
+bye,goodbye
+see you later,goodbye
+I feel depressed and alone,asking_mental_health_question
+why do I panic before sleeping?,asking_mental_health_question
+I am angry all the time and it scares me,asking_mental_health_question
+hi I feel anxious today,asking_mental_health_question
+thanks but I still feel hopeless,asking_mental_health_question
+write me a SQL query,out_of_scope
+who won the world cup?,out_of_scope
+recommend a laptop,out_of_scope

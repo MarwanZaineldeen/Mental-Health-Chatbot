@@ -7,4 +7,5 @@ transformers
 torch
 accelerate
 evaluate
+groq==1.4.0
 jupyter

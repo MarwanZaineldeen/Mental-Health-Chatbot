@@ -73,6 +73,38 @@ Run the emotion UI:
 .\.venv\Scripts\python.exe src\models\emotion_detector_ui.py
 ```
 
+## Module 3: Intent Classification
+
+The intent classifier uses few-shot prompting with Groq:
+
+- Model: `llama-3.1-8b-instant`
+- Method: strict JSON classification prompt
+- Intents: greeting, goodbye, gratitude, asking_mental_health_question, out_of_scope
+
+Set your API key outside Git:
+
+```powershell
+$env:GROQ_API_KEY="your_key_here"
+```
+
+Run intent inference:
+
+```bash
+.\.venv\Scripts\python.exe src\models\intent_classifier.py "hi, I feel anxious and cannot sleep"
+```
+
+Run the intent evaluation report:
+
+```bash
+.\.venv\Scripts\python.exe src\models\intent_classifier.py --evaluate
+```
+
+Run the intent UI:
+
+```bash
+.\.venv\Scripts\python.exe src\models\intent_detector_ui.py
+```
+
 ### Install Dependencies
 
 ```bash
