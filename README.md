@@ -61,6 +61,12 @@ User message -> Language Detection -> Emotion Classification -> Intent Classific
 
 Module 1 decides the language for routing and response language. Module 2 adds emotional context so later response generation can be gentler for sadness/fear/anger and more direct for neutral informational requests. Crisis handling should still be implemented as a separate safety route later, not inferred from emotion alone.
 
+Run the current Modules 1-3 routing flow:
+
+```bash
+.\.venv\Scripts\python.exe src\models\message_router.py "hi, I feel anxious and cannot sleep"
+```
+
 Run emotion inference after exporting the trained model:
 
 ```bash
