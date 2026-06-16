@@ -3,4 +3,8 @@ scikit-learn==1.9.0
 joblib==1.5.3
 gradio==6.18.0
 datasets==5.0.0
+transformers
+torch
+accelerate
+evaluate
 jupyter

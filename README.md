@@ -31,6 +31,48 @@ reports/module_1_language_detection/
 
 The UI returns the detected language, confidence, and whether the prediction passed the confidence threshold.
 
+## Module 2: Emotion Classification
+
+The emotion classifier uses a fine-tuned transformer:
+
+- Base model: `distilbert-base-uncased`
+- Dataset: `dair-ai/emotion`
+- Labels: sadness, joy, love, anger, fear, surprise
+- Training target: run on Colab T4 using `notebooks/module_2_emotion_training.ipynb`
+
+DistilBERT is used because it keeps most of BERT's language understanding while being smaller and faster, which makes it a better fit for a student project that needs GPU training but practical local inference.
+
+After training in Colab, the notebook saves:
+
+```text
+src/models/saved_emotion_model/
+reports/module_2_emotion_classification/
+```
+
+The local inference class returns the predicted emotion, confidence, and a simple word-occlusion explanation showing which words most affected the predicted emotion.
+
+### Module Integration Plan
+
+The final chatbot will analyze each user message in this order:
+
+```text
+User message -> Language Detection -> Emotion Classification -> Intent Classification -> RAG/direct response
+```
+
+Module 1 decides the language for routing and response language. Module 2 adds emotional context so later response generation can be gentler for sadness/fear/anger and more direct for neutral informational requests. Crisis handling should still be implemented as a separate safety route later, not inferred from emotion alone.
+
+Run emotion inference after exporting the trained model:
+
+```bash
+.\.venv\Scripts\python.exe src\models\emotion_classifier.py "I feel anxious and overwhelmed" --explain
+```
+
+Run the emotion UI:
+
+```bash
+.\.venv\Scripts\python.exe src\models\emotion_detector_ui.py
+```
+
 ### Install Dependencies
 
 ```bash
