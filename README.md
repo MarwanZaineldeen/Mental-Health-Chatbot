@@ -87,6 +87,8 @@ Set your API key outside Git:
 $env:GROQ_API_KEY="your_key_here"
 ```
 
+For a local `.env` file, use `.env.example` as a template. The real `.env` file is ignored by Git.
+
 Run intent inference:
 
 ```bash
