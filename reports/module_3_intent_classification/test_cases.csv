@@ -1,0 +1,26 @@
+text,expected_intent,predicted_intent,confidence,correct,reason
+hello,greeting,greeting,0.95,True,The user is only greeting the assistant.
+good morning,greeting,greeting,0.95,True,The user is only greeting the assistant.
+"hey there, are you available?",greeting,greeting,0.95,True,The user is checking availability without a mental-health concern.
+thank you so much,gratitude,gratitude,1.0,True,The user is expressing thanks.
+"thanks, that helped",gratitude,gratitude,0.95,True,The user is expressing thanks.
+I appreciate your help,gratitude,gratitude,1.0,True,The user is expressing thanks.
+bye,goodbye,goodbye,0.95,True,The user is ending the conversation.
+see you later,goodbye,goodbye,0.95,True,The user is ending the conversation.
+"good night, talk tomorrow",goodbye,goodbye,0.95,True,The user is ending the conversation.
+I feel depressed and alone,asking_mental_health_question,asking_mental_health_question,1.0,True,"The user describes depression and feelings of loneliness, indicating a mental-health concern."
+why do I panic before sleeping?,asking_mental_health_question,asking_mental_health_question,1.0,True,"The user describes panic before sleeping, indicating a mental-health concern."
+I am angry all the time and it scares me,asking_mental_health_question,asking_mental_health_question,0.95,True,"The user describes anger and fear, indicating a mental-health concern."
+"hi, I feel anxious today",asking_mental_health_question,asking_mental_health_question,0.95,True,Mental-health concern overrides the greeting.
+"thanks, but I still feel hopeless",asking_mental_health_question,asking_mental_health_question,0.95,True,Mental-health concern overrides the gratitude.
+"bye, but I am scared I will spiral again tonight",asking_mental_health_question,asking_mental_health_question,0.95,True,The user expresses a mental-health concern despite saying goodbye.
+can you explain why panic attacks happen?,asking_mental_health_question,asking_mental_health_question,1.0,True,"The user is asking about panic attacks, a mental health concern."
+I keep overthinking everything and cannot focus,asking_mental_health_question,asking_mental_health_question,0.95,True,"The user describes overthinking and difficulty focusing, which are mental-health concerns."
+what are common symptoms of depression?,asking_mental_health_question,asking_mental_health_question,1.0,True,"The user is asking about symptoms of depression, indicating a mental-health concern."
+I feel numb and disconnected from everyone,asking_mental_health_question,asking_mental_health_question,0.95,True,"The user describes feelings of numbness and disconnection, indicating a mental-health concern."
+write me a SQL query,out_of_scope,out_of_scope,1.0,True,The request is unrelated to mental health.
+who won the world cup?,out_of_scope,out_of_scope,1.0,True,The request is unrelated to mental health.
+recommend a laptop,out_of_scope,out_of_scope,1.0,True,The request is unrelated to mental health.
+summarize this business article,out_of_scope,out_of_scope,0.95,True,The request is unrelated to mental health.
+build me a weekly gym routine,out_of_scope,out_of_scope,1.0,True,The request is unrelated to mental health.
+translate this sentence into French,out_of_scope,out_of_scope,1.0,True,The request is unrelated to mental health.

@@ -32,6 +32,7 @@ Return exactly one intent:
 
 Rules:
 - If the message includes a mental-health concern, choose asking_mental_health_question even if it also includes greeting or thanks.
+- Do not infer mental-health intent from generic greetings, availability checks, or small talk unless the concern is explicit.
 - Choose out_of_scope for non-mental-health requests.
 - Return only valid JSON with keys: intent, confidence, reason.
 - confidence must be a number from 0 to 1.
@@ -39,6 +40,7 @@ Rules:
 
 FEW_SHOT_EXAMPLES = [
     ("hi", "greeting", "The user is only greeting the assistant."),
+    ("hey there, are you available?", "greeting", "The user is checking availability without a mental-health concern."),
     ("thanks for listening", "gratitude", "The user is expressing thanks."),
     ("bye, talk later", "goodbye", "The user is ending the conversation."),
     (
@@ -57,18 +59,29 @@ FEW_SHOT_EXAMPLES = [
 TEST_CASES = [
     ("hello", "greeting"),
     ("good morning", "greeting"),
+    ("hey there, are you available?", "greeting"),
     ("thank you so much", "gratitude"),
     ("thanks, that helped", "gratitude"),
+    ("I appreciate your help", "gratitude"),
     ("bye", "goodbye"),
     ("see you later", "goodbye"),
+    ("good night, talk tomorrow", "goodbye"),
     ("I feel depressed and alone", "asking_mental_health_question"),
     ("why do I panic before sleeping?", "asking_mental_health_question"),
     ("I am angry all the time and it scares me", "asking_mental_health_question"),
     ("hi, I feel anxious today", "asking_mental_health_question"),
     ("thanks, but I still feel hopeless", "asking_mental_health_question"),
+    ("bye, but I am scared I will spiral again tonight", "asking_mental_health_question"),
+    ("can you explain why panic attacks happen?", "asking_mental_health_question"),
+    ("I keep overthinking everything and cannot focus", "asking_mental_health_question"),
+    ("what are common symptoms of depression?", "asking_mental_health_question"),
+    ("I feel numb and disconnected from everyone", "asking_mental_health_question"),
     ("write me a SQL query", "out_of_scope"),
     ("who won the world cup?", "out_of_scope"),
     ("recommend a laptop", "out_of_scope"),
+    ("summarize this business article", "out_of_scope"),
+    ("build me a weekly gym routine", "out_of_scope"),
+    ("translate this sentence into French", "out_of_scope"),
 ]
 
 

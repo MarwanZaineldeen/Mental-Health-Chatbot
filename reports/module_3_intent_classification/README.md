@@ -21,4 +21,4 @@ Generated files:
 - `metrics_summary.json`
 - `test_cases.csv`
 
-The committed `metrics_summary.json` documents the method before live evaluation. Running the evaluation command updates it with measured accuracy.
+The committed `metrics_summary.json` and `test_cases.csv` show the latest live evaluation results.
