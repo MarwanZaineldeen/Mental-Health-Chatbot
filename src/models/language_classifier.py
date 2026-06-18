@@ -6,9 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 import joblib
-import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 
@@ -74,7 +72,9 @@ class LanguageDetector:
         )
 
     @staticmethod
-    def _load_dataset(path: str | Path) -> pd.DataFrame:
+    def _load_dataset(path: str | Path) -> Any:
+        import pandas as pd
+
         df = pd.read_csv(path)
         required_columns = {"text", "labels"}
         missing_columns = required_columns.difference(df.columns)
@@ -112,7 +112,9 @@ class LanguageDetector:
             "model_path": str(self.model_path),
         }
 
-    def evaluate(self, df: pd.DataFrame, split_name: str) -> dict[str, Any]:
+    def evaluate(self, df: Any, split_name: str) -> dict[str, Any]:
+        from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
         predictions = self.pipeline.predict(df["text"])
         labels = sorted(df["labels"].unique())
         report_dict = classification_report(
@@ -148,6 +150,8 @@ class LanguageDetector:
         print(f"Saved model to {self.model_path}")
 
     def save_reports(self, validation_metrics: dict[str, Any], test_metrics: dict[str, Any]) -> None:
+        import pandas as pd
+
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
         summary = {
