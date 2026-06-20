@@ -8,7 +8,7 @@ A modular AI-powered mental health chatbot pipeline built with Python. The syste
  
 **Models are NOT included** in this repository due to large file sizes. You must run each module first to train and generate the models locally before running the chatbot.
  
-**This code lives on the `Project_V1` branch** — after cloning, make sure to switch to it or you will see Marwan's code instead.
+**This code lives on the `Project_V1` branch** — after cloning, make sure to switch to it
  
 ---
  
