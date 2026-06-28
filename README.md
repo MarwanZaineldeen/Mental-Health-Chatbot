@@ -1,9 +1,3 @@
----
-title: Mental Health Chatbot
-sdk: docker
-app_port: 7860
----
-
 # Nura: Mental Health Support Chatbot
 
 Nura is your gentle mental wellness companion: an end-to-end mental-health support chatbot built with a modular NLP and RAG architecture. The system detects the user's language, emotion, and intent, applies safety routing, retrieves relevant mental-health context from a Qdrant vector database, and generates a supportive response through Groq.
