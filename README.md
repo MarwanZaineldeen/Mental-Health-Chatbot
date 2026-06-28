@@ -157,16 +157,21 @@ QDRANT_URL=https://your-qdrant-cluster-url
 QDRANT_API_KEY=your_qdrant_api_key_here
 QDRANT_COLLECTION=mental_health_rag_v2
 EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-base
-GROQ_RESPONSE_MAX_TOKENS=400
+GROQ_RESPONSE_MAX_TOKENS=340
 GROQ_RESPONSE_TEMPERATURE=0.55
 GROQ_INTENT_MODEL=llama-3.1-8b-instant
 GROQ_RESPONSE_MODEL=llama-3.1-8b-instant
-GROQ_INTENT_FALLBACK_MODELS=openai/gpt-oss-20b
-GROQ_RESPONSE_FALLBACK_MODELS=openai/gpt-oss-20b
-GROQ_REQUEST_TIMEOUT_SECONDS=12
+GROQ_INTENT_FALLBACK_MODELS=
+GROQ_RESPONSE_FALLBACK_MODELS=
+GROQ_REQUEST_TIMEOUT_SECONDS=8
+GROQ_MAX_RETRIES=0
 GOOGLE_INTENT_MODEL=gemini-2.5-flash
 GOOGLE_RESPONSE_MODEL=gemini-2.5-flash
 GOOGLE_REQUEST_TIMEOUT_SECONDS=12
+LLM_CONTEXT_TOP_K=5
+LLM_CONTEXT_MAX_CHARS=700
+LLM_HISTORY_MESSAGES=4
+PIPELINE_HISTORY_MAX_CHARS=700
 TORCH_NUM_THREADS=1
 NURA_WARMUP_ON_START=false
 NURA_WARMUP_RETRIEVAL=false
@@ -195,7 +200,7 @@ Run intent evaluation:
 Test retrieval:
 
 ```powershell
-.\.venv\Scripts\python.exe src\retrieval\retrieval_engine.py "I feel anxious and cannot sleep" --source both --top-k 8
+.\.venv\Scripts\python.exe src\retrieval\retrieval_engine.py "I feel anxious and cannot sleep" --source both --top-k 5
 ```
 
 Compare retrieval indexes:
@@ -213,7 +218,7 @@ Run integrated chatbot edge cases:
 Benchmark integrated chatbot latency:
 
 ```powershell
-.\.venv\Scripts\python.exe src\evaluation\benchmark_chatbot_latency.py --repeat 1 --source both --top-k 8
+.\.venv\Scripts\python.exe src\evaluation\benchmark_chatbot_latency.py --repeat 1 --source both --top-k 5
 ```
 
 ## Deployment

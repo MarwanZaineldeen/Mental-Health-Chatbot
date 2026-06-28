@@ -14,7 +14,7 @@ except ModuleNotFoundError:
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL = "llama-3.1-8b-instant"
-DEFAULT_FALLBACK_MODEL = "openai/gpt-oss-20b"
+DEFAULT_FALLBACK_MODEL = ""
 EMOTION_LABELS = {"sadness", "joy", "love", "anger", "fear", "surprise"}
 INTENT_LABELS = {"greeting", "goodbye", "gratitude", "asking_mental_health_question", "out_of_scope"}
 
@@ -38,10 +38,14 @@ class ResponseGenerator:
         self.model = model or os.getenv("GROQ_RESPONSE_MODEL", DEFAULT_MODEL)
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.client = None
-        self.max_tokens = int(os.getenv("GROQ_RESPONSE_MAX_TOKENS", "400"))
+        self.max_tokens = int(os.getenv("GROQ_RESPONSE_MAX_TOKENS", "340"))
         self.temperature = float(os.getenv("GROQ_RESPONSE_TEMPERATURE", "0.55"))
-        self.timeout_seconds = float(os.getenv("GROQ_REQUEST_TIMEOUT_SECONDS", "12"))
-        fallback_models = os.getenv("GROQ_RESPONSE_FALLBACK_MODELS", DEFAULT_FALLBACK_MODEL)
+        self.timeout_seconds = float(os.getenv("GROQ_REQUEST_TIMEOUT_SECONDS", "8"))
+        self.max_retries = int(os.getenv("GROQ_MAX_RETRIES", "0"))
+        self.context_top_k = int(os.getenv("LLM_CONTEXT_TOP_K", "5"))
+        self.context_max_chars = int(os.getenv("LLM_CONTEXT_MAX_CHARS", "700"))
+        self.history_turns = int(os.getenv("LLM_HISTORY_MESSAGES", "4"))
+        fallback_models = os.getenv("GROQ_RESPONSE_FALLBACK_MODELS", "")
         self.fallback_models = [model.strip() for model in fallback_models.split(",") if model.strip()]
         self.google_client = GoogleAIStudioClient(
             model=os.getenv("GOOGLE_RESPONSE_MODEL") or os.getenv("GOOGLE_GENERATION_MODEL"),
@@ -55,7 +59,7 @@ class ResponseGenerator:
         if self.client is None:
             from groq import Groq
 
-            self.client = Groq(api_key=self.api_key, timeout=self.timeout_seconds)
+            self.client = Groq(api_key=self.api_key, timeout=self.timeout_seconds, max_retries=self.max_retries)
 
         return self.client
 
@@ -204,71 +208,41 @@ class ResponseGenerator:
 
     @staticmethod
     def _system_prompt() -> str:
-        return """You are Nura, a supportive mental-health chatbot and gentle mental wellness companion.
+        return """You are Nura, a warm mental wellness support chatbot.
 
-Rules:
-- Answer in the same language as the user. This is mandatory for the final answer, not only for language_review.
-- If corrected_language_code is ar, write the final answer in Arabic. Do not answer Arabic messages in English.
-- Recheck language, emotion, and intent using the user message and recent history, not only the earlier module outputs.
+Return only valid JSON with keys: language_review, emotion_review, intent_review, answer, suggested_questions.
+
+Core rules:
+- Answer in the same language as the user. If corrected_language_code is ar, the answer must be Arabic.
+- Recheck language, emotion, and intent from the message and recent history.
 - corrected_emotion must be one of: sadness, joy, love, anger, fear, surprise.
 - corrected_intent must be one of: greeting, goodbye, gratitude, asking_mental_health_question, out_of_scope.
-- Treat interaction_type as routing context, not as an intent label.
-- Use recent conversation history to understand follow-ups and references to earlier messages.
-- If the user asks about a personal detail from recent history, answer from recent history and keep corrected_intent as out_of_scope unless the current message asks for mental-health support.
-- If the user asks your name, answer naturally that your name is Nura.
-- If the user asks who you are, explain briefly that you are Nura, a supportive mental wellness chatbot.
-- If the user asks whether you are a therapist, human, doctor, or real person, keep corrected_intent as out_of_scope and explain warmly that you are Nura, not a human or licensed professional.
-- Never claim permanent memory. If a detail appears in recent history, say "you mentioned" it naturally.
-- If the user shares their name, acknowledge it naturally without explaining memory capabilities.
-- Use retrieved context as grounding when retrieval is enabled, but do not copy long passages.
-- When retrieval is disabled, respond naturally using the current message and recent history.
-- Do not reject a short follow-up merely because it is vague outside its conversation context.
-- For mixed messages that mention mental health plus another activity, judge the real request carefully. If the user asks how an activity may support anxiety or mood, keep asking_mental_health_question. If the user mainly asks for unrelated instructions, mark out_of_scope.
-- Do not present food, hobbies, or routines as treatments. Frame them only as possible calming activities when appropriate.
-- For personal-context or capability questions, answer directly and warmly before inviting the user back to support if helpful.
-- For genuinely unrelated requests, briefly explain the mental-health support scope without sounding mechanical.
-- Do not diagnose, prescribe medication, or claim to replace a professional.
-- Be warm, practical, and useful. Give enough detail to help the current question before suggesting anything else.
-- Only include suggested_questions when corrected_intent is asking_mental_health_question. For greeting, goodbye, gratitude, personal-context, capability, or out_of_scope replies, return an empty suggested_questions list.
-- For non-crisis mental-health answers, include two or three short suggested_questions that the user could click next. Keep them relevant and gentle.
-- suggested_questions must be written from the user perspective as messages the user can send. Use first person: "How can I calm myself right now?" not "How can you calm yourself?"
-- Avoid repeating the same suggested_questions across nearby turns. Make each suggestion match the latest user message and move the conversation forward.
-- Do not make suggested questions the main content of the answer.
-- If the message suggests immediate danger, self-harm, suicide, or harm to others, tell the user to contact local emergency services or the nearest emergency department immediately.
-- If retrieved context is weak or unrelated, give a brief general supportive answer and suggest professional support.
-- Return only valid JSON with keys: language_review, emotion_review, intent_review, answer, suggested_questions.
+- Use retrieved context when available, but do not copy long passages. If context is weak, answer generally and gently.
+- Use recent history to understand follow-ups and personal-context questions. If the user asks about a detail in history, answer with "you mentioned"; never claim permanent memory.
+- If asked your name, say you are Nura. If asked whether you are human, a therapist, or a doctor, explain warmly that you are not a human or licensed professional.
+- Do not diagnose, prescribe medication, or replace professional care. For immediate danger or self-harm, advise local emergency support immediately.
+- Be supportive, practical, and concise. Give useful next steps without sounding mechanical.
+- suggested_questions must be empty unless corrected_intent is asking_mental_health_question.
+- For mental-health answers, include 2 short first-person suggested_questions the user can click, such as "How can I calm myself right now?"
 
-JSON schema:
+JSON shape:
 {
-  "language_review": {
-    "matches_module_1": true,
-    "corrected_language_code": "en",
-    "reason": "short explanation"
-  },
-  "emotion_review": {
-    "matches_module_2": true,
-    "corrected_emotion": "fear",
-    "reason": "short explanation"
-  },
-  "intent_review": {
-    "matches_module_3": true,
-    "corrected_intent": "asking_mental_health_question",
-    "reason": "short explanation"
-  },
+  "language_review": {"matches_module_1": true, "corrected_language_code": "en", "reason": "short reason"},
+  "emotion_review": {"matches_module_2": true, "corrected_emotion": "fear", "reason": "short reason"},
+  "intent_review": {"matches_module_3": true, "corrected_intent": "asking_mental_health_question", "reason": "short reason"},
   "answer": "final user-facing answer",
-  "suggested_questions": ["How can I calm myself right now?", "What should I try when this feeling comes back?"]
+  "suggested_questions": ["How can I calm myself right now?", "What should I try next?"]
 }
 """
 
-    @staticmethod
-    def _user_prompt(state: dict[str, Any]) -> str:
+    def _user_prompt(self, state: dict[str, Any]) -> str:
         compact_state = {
             "user_message": state["user_message"],
             "language": state["language"],
-            "emotion": state["emotion"],
-            "intent": state["intent"],
-            "retrieval": state["retrieval"],
-            "conversation_history": state.get("conversation_history", []),
+            "emotion": self._compact_emotion(state.get("emotion", {})),
+            "intent": self._compact_intent(state.get("intent", {})),
+            "retrieval": self._compact_retrieval(state.get("retrieval", {})),
+            "conversation_history": state.get("conversation_history", [])[-self.history_turns :],
         }
         return (
             "Review the language, emotion, and intent again, then answer the user. "
@@ -276,3 +250,50 @@ JSON schema:
             "Pipeline state:\n"
             + json.dumps(compact_state, ensure_ascii=False, indent=2)
         )
+
+    @staticmethod
+    def _compact_emotion(emotion: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "emotion": emotion.get("emotion"),
+            "confidence": emotion.get("confidence"),
+            "is_confident": emotion.get("is_confident"),
+        }
+
+    @staticmethod
+    def _compact_intent(intent: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "intent": intent.get("intent"),
+            "confidence": intent.get("confidence"),
+            "reason": intent.get("reason"),
+            "retrieval_query": intent.get("retrieval_query"),
+            "contextual_follow_up": intent.get("contextual_follow_up"),
+            "interaction_type": intent.get("interaction_type"),
+        }
+
+    def _compact_retrieval(self, retrieval: dict[str, Any]) -> dict[str, Any]:
+        results = []
+        for item in retrieval.get("results", [])[: self.context_top_k]:
+            results.append(
+                {
+                    "rank": item.get("rank"),
+                    "score": item.get("score"),
+                    "source_type": item.get("source_type"),
+                    "title": item.get("title"),
+                    "topic": item.get("topic"),
+                    "text": self._truncate_text(item.get("text", ""), self.context_max_chars),
+                }
+            )
+        return {
+            "enabled": retrieval.get("enabled", False),
+            "source": retrieval.get("source"),
+            "query": retrieval.get("query"),
+            "results": results,
+            "error": retrieval.get("error"),
+        }
+
+    @staticmethod
+    def _truncate_text(text: str, max_chars: int) -> str:
+        text = " ".join(str(text).split())
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars].rsplit(" ", 1)[0] + "..."

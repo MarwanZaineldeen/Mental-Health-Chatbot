@@ -114,7 +114,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark integrated chatbot latency by pipeline step.")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--source", choices=["both", "cci", "amod"], default="both")
-    parser.add_argument("--top-k", type=int, default=8)
+    parser.add_argument("--top-k", type=int, default=5)
     return parser.parse_args()
 
 

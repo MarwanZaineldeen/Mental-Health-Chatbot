@@ -17,7 +17,7 @@ except ModuleNotFoundError:
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REPORT_DIR = PROJECT_ROOT / "reports" / "module_3_intent_classification"
 DEFAULT_MODEL = "llama-3.1-8b-instant"
-DEFAULT_FALLBACK_MODEL = "openai/gpt-oss-20b"
+DEFAULT_FALLBACK_MODEL = ""
 
 INTENT_NAMES = (
     "greeting",
@@ -137,7 +137,8 @@ class IntentClassifier:
         self.model = model or os.getenv("GROQ_INTENT_MODEL", DEFAULT_MODEL)
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.temperature = temperature
-        self.timeout_seconds = float(os.getenv("GROQ_REQUEST_TIMEOUT_SECONDS", "12"))
+        self.timeout_seconds = float(os.getenv("GROQ_REQUEST_TIMEOUT_SECONDS", "8"))
+        self.max_retries = int(os.getenv("GROQ_MAX_RETRIES", "0"))
         fallback_models = os.getenv("GROQ_INTENT_FALLBACK_MODELS", DEFAULT_FALLBACK_MODEL)
         self.fallback_models = [model.strip() for model in fallback_models.split(",") if model.strip()]
         self.google_client = GoogleAIStudioClient(
@@ -155,7 +156,7 @@ class IntentClassifier:
                 from groq import Groq
             except ImportError as exc:
                 raise ImportError("Install the Groq SDK with `pip install groq`.") from exc
-            self.client = Groq(api_key=self.api_key, timeout=self.timeout_seconds)
+            self.client = Groq(api_key=self.api_key, timeout=self.timeout_seconds, max_retries=self.max_retries)
 
         return self.client
 

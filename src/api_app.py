@@ -32,9 +32,10 @@ app = FastAPI(
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
     source: str = Field("both", pattern="^(both|cci|amod)$")
-    top_k: int = Field(8, ge=1, le=10)
+    top_k: int = Field(5, ge=1, le=10)
     collection: str | None = Field(None, pattern="^(mental_health_rag|mental_health_rag_v2)$")
     history: list[dict[str, str]] = Field(default_factory=list)
+    include_state: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -82,7 +83,7 @@ def chat(request: ChatRequest) -> ChatResponse:
     return ChatResponse(
         response=output["response"],
         suggested_questions=output.get("suggested_questions", []),
-        state=output["state"],
+        state=output["state"] if request.include_state else {},
     )
 
 
@@ -768,7 +769,7 @@ PRODUCTION_PAGE = r"""
         const response = await fetch("/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, source, top_k: 8, history: previousHistory }),
+          body: JSON.stringify({ message: text, source, top_k: 5, history: previousHistory }),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
@@ -1116,7 +1117,7 @@ DEVELOPER_PAGE = r"""
         const response = await fetch("/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, source, top_k: topK, collection, history: previousHistory }),
+          body: JSON.stringify({ message, source, top_k: topK, collection, history: previousHistory, include_state: true }),
         });
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);

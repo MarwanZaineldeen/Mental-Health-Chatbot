@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -177,8 +178,9 @@ class ChatbotPipeline:
         expected_language = language_review.get("corrected_language_code") or state.get("language", {}).get("language_code")
         if expected_language == "ar" and not ChatbotPipeline._contains_arabic(response):
             return (
-                "???? ??? ??? ??? ???? ???? ??? ??????. ???? ???? ???????. "
-                "???? ??? ???? ???? ??????? ??????? ???? ????? ?????? ???? ?????."
+                "\u0623\u0646\u0627 \u0645\u0639\u0643 \u0648\u0647\u0627\u0633\u0627\u0639\u062f\u0643 \u0628\u0627\u0644\u0639\u0631\u0628\u064a. "
+                "\u0642\u0648\u0644\u064a \u0625\u064a\u0647 \u0623\u0643\u062a\u0631 \u062d\u0627\u062c\u0629 \u0645\u0636\u0627\u064a\u0642\u0627\u0643 \u062f\u0644\u0648\u0642\u062a\u064a\u060c "
+                "\u0648\u0646\u0627\u062e\u062f\u0647\u0627 \u062e\u0637\u0648\u0629 \u062e\u0637\u0648\u0629."
             )
         return response
 
@@ -317,15 +319,27 @@ class ChatbotPipeline:
 
     @staticmethod
     def _prepare_history(message: str, history: list[dict[str, str]]) -> list[dict[str, str]]:
-        clean_history = [
-            {"role": item.get("role", ""), "content": str(item.get("content", "")).strip()}
-            for item in history
-            if item.get("role") in {"user", "assistant"} and str(item.get("content", "")).strip()
-        ]
+        max_chars = ChatbotPipeline._history_max_chars()
+        clean_history = []
+        for item in history:
+            role = item.get("role", "")
+            content = str(item.get("content", "")).strip()
+            if role not in {"user", "assistant"} or not content:
+                continue
+            if len(content) > max_chars:
+                content = content[:max_chars].rstrip() + "..."
+            clean_history.append({"role": role, "content": content})
+
         if clean_history and clean_history[-1]["role"] == "user" and clean_history[-1]["content"] == message:
             clean_history.pop()
         return clean_history[-8:]
 
+    @staticmethod
+    def _history_max_chars() -> int:
+        try:
+            return max(200, int(os.getenv("PIPELINE_HISTORY_MAX_CHARS", "700")))
+        except ValueError:
+            return 700
     def warmup(self, include_retrieval: bool = False) -> dict[str, Any]:
         status: dict[str, Any] = {
             "language_model": "loaded",
