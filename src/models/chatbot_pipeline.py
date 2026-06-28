@@ -104,6 +104,7 @@ class ChatbotPipeline:
             else:
                 state["suggested_questions"] = []
             response = generated.get("answer") or "I am here with you, but I could not generate a complete response."
+            response = self._enforce_response_language(response, state)
         except RuntimeError as error:
             state["timings_ms"]["generation"] = self._elapsed_ms(generation_started)
             state["llm_review"] = {"language": {}, "emotion": {}, "intent": {}}
@@ -169,6 +170,21 @@ class ChatbotPipeline:
         state["timings_ms"]["generation"] = 0.0
         state["timings_ms"]["total"] = self._elapsed_ms(total_started)
         return {"response": responses[intent], "suggested_questions": [], "state": state}
+
+    @staticmethod
+    def _enforce_response_language(response: str, state: dict[str, Any]) -> str:
+        language_review = state.get("llm_review", {}).get("language", {})
+        expected_language = language_review.get("corrected_language_code") or state.get("language", {}).get("language_code")
+        if expected_language == "ar" and not ChatbotPipeline._contains_arabic(response):
+            return (
+                "???? ??? ??? ??? ???? ???? ??? ??????. ???? ???? ???????. "
+                "???? ??? ???? ???? ??????? ??????? ???? ????? ?????? ???? ?????."
+            )
+        return response
+
+    @staticmethod
+    def _contains_arabic(text: str) -> bool:
+        return any("\u0600" <= char <= "\u06ff" for char in text)
 
     def _analyze(self, message: str, history: list[dict[str, str]]) -> dict[str, Any]:
         timings: dict[str, float] = {}
