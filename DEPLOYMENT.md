@@ -23,7 +23,7 @@ Recommended values:
 LANGUAGE_MODEL_FILENAME=saved_lang_model.pkl
 QDRANT_COLLECTION=mental_health_rag_v2
 EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-base
-GROQ_RESPONSE_MAX_TOKENS=340
+GROQ_RESPONSE_MAX_TOKENS=500
 GROQ_RESPONSE_TEMPERATURE=0.55
 GROQ_INTENT_MODEL=llama-3.1-8b-instant
 GROQ_RESPONSE_MODEL=llama-3.1-8b-instant
@@ -36,8 +36,7 @@ GOOGLE_RESPONSE_MODEL=gemini-2.5-flash
 GOOGLE_REQUEST_TIMEOUT_SECONDS=12
 LLM_CONTEXT_TOP_K=5
 LLM_CONTEXT_MAX_CHARS=700
-LLM_HISTORY_MESSAGES=4
-PIPELINE_HISTORY_MAX_CHARS=700
+LLM_HISTORY_MESSAGES=8
 TORCH_NUM_THREADS=1
 NURA_WARMUP_ON_START=false
 NURA_WARMUP_RETRIEVAL=false
@@ -50,12 +49,11 @@ For Hugging Face Spaces or Render, the most useful latency controls are:
 
 - Keep the Space/app warm before a demo. Cold starts are usually slower than normal requests.
 - Use the production UI for users and `/developer` only for debugging, because the developer page returns full pipeline state.
-- Keep `GROQ_RESPONSE_MAX_TOKENS` around `340` for fuller answers while keeping latency controlled.
+- Keep `GROQ_RESPONSE_MAX_TOKENS` around `500` for fuller answers without making responses too long.
 - Set `GROQ_INTENT_FALLBACK_MODELS` and `GROQ_RESPONSE_FALLBACK_MODELS` to another reliable Groq model such as `openai/gpt-oss-20b`. Use comma-separated lists if you want more than one fallback.
 - `GROQ_REQUEST_TIMEOUT_SECONDS=8` and `GROQ_MAX_RETRIES=0` stop one slow Groq call from blocking the whole request for too long before trying a fallback.
 - Google AI Studio is only used as a second-provider fallback when all configured Groq models fail. Set `GOOGLE_API_KEY` in hosting secrets to enable it.
 - `EMBEDDING_BATCH_SIZE` mainly matters when building indexes or embedding multiple texts. It does not speed up a single user query much.
-- `PIPELINE_HISTORY_MAX_CHARS=700` trims long previous messages before follow-up intent and generation calls.
 - The app already runs language, emotion, and intent analysis in parallel.
 
 Latency can be measured with:

@@ -38,13 +38,13 @@ class ResponseGenerator:
         self.model = model or os.getenv("GROQ_RESPONSE_MODEL", DEFAULT_MODEL)
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.client = None
-        self.max_tokens = int(os.getenv("GROQ_RESPONSE_MAX_TOKENS", "340"))
+        self.max_tokens = int(os.getenv("GROQ_RESPONSE_MAX_TOKENS", "500"))
         self.temperature = float(os.getenv("GROQ_RESPONSE_TEMPERATURE", "0.55"))
         self.timeout_seconds = float(os.getenv("GROQ_REQUEST_TIMEOUT_SECONDS", "8"))
         self.max_retries = int(os.getenv("GROQ_MAX_RETRIES", "0"))
         self.context_top_k = int(os.getenv("LLM_CONTEXT_TOP_K", "5"))
         self.context_max_chars = int(os.getenv("LLM_CONTEXT_MAX_CHARS", "700"))
-        self.history_turns = int(os.getenv("LLM_HISTORY_MESSAGES", "4"))
+        self.history_turns = int(os.getenv("LLM_HISTORY_MESSAGES", "8"))
         fallback_models = os.getenv("GROQ_RESPONSE_FALLBACK_MODELS", "")
         self.fallback_models = [model.strip() for model in fallback_models.split(",") if model.strip()]
         self.google_client = GoogleAIStudioClient(
@@ -221,7 +221,7 @@ Core rules:
 - Use recent history to understand follow-ups and personal-context questions. If the user asks about a detail in history, answer with "you mentioned"; never claim permanent memory.
 - If asked your name, say you are Nura. If asked whether you are human, a therapist, or a doctor, explain warmly that you are not a human or licensed professional.
 - Do not diagnose, prescribe medication, or replace professional care. For immediate danger or self-harm, advise local emergency support immediately.
-- Be supportive, practical, and concise. Give useful next steps without sounding mechanical.
+- Be supportive, practical, and clear. Give a thoughtful answer with enough detail to be genuinely useful, usually 2 to 4 short paragraphs when the user asks a real mental-health question.
 - suggested_questions must be empty unless corrected_intent is asking_mental_health_question.
 - For mental-health answers, include 2 short first-person suggested_questions the user can click, such as "How can I calm myself right now?"
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -284,6 +283,10 @@ class ChatbotPipeline:
         english_social = {
             "hi",
             "hello",
+            "hello how are you",
+            "hello how are you?",
+            "hi how are you",
+            "hi how are you?",
             "hey",
             "hey there",
             "good morning",
@@ -319,27 +322,15 @@ class ChatbotPipeline:
 
     @staticmethod
     def _prepare_history(message: str, history: list[dict[str, str]]) -> list[dict[str, str]]:
-        max_chars = ChatbotPipeline._history_max_chars()
-        clean_history = []
-        for item in history:
-            role = item.get("role", "")
-            content = str(item.get("content", "")).strip()
-            if role not in {"user", "assistant"} or not content:
-                continue
-            if len(content) > max_chars:
-                content = content[:max_chars].rstrip() + "..."
-            clean_history.append({"role": role, "content": content})
-
+        clean_history = [
+            {"role": item.get("role", ""), "content": str(item.get("content", "")).strip()}
+            for item in history
+            if item.get("role") in {"user", "assistant"} and str(item.get("content", "")).strip()
+        ]
         if clean_history and clean_history[-1]["role"] == "user" and clean_history[-1]["content"] == message:
             clean_history.pop()
         return clean_history[-8:]
 
-    @staticmethod
-    def _history_max_chars() -> int:
-        try:
-            return max(200, int(os.getenv("PIPELINE_HISTORY_MAX_CHARS", "700")))
-        except ValueError:
-            return 700
     def warmup(self, include_retrieval: bool = False) -> dict[str, Any]:
         status: dict[str, Any] = {
             "language_model": "loaded",
