@@ -12,6 +12,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REPORT_DIR = PROJECT_ROOT / "reports" / "module_3_intent_classification"
 DEFAULT_MODEL = "llama-3.1-8b-instant"
+DEFAULT_FALLBACK_MODEL = "openai/gpt-oss-20b"
 
 INTENT_NAMES = (
     "greeting",
@@ -131,6 +132,9 @@ class IntentClassifier:
         self.model = model
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.temperature = temperature
+        self.timeout_seconds = float(os.getenv("GROQ_REQUEST_TIMEOUT_SECONDS", "12"))
+        fallback_models = os.getenv("GROQ_INTENT_FALLBACK_MODELS", DEFAULT_FALLBACK_MODEL)
+        self.fallback_models = [model.strip() for model in fallback_models.split(",") if model.strip()]
         self.client = None
 
     def _get_client(self) -> Any:
@@ -142,9 +146,104 @@ class IntentClassifier:
                 from groq import Groq
             except ImportError as exc:
                 raise ImportError("Install the Groq SDK with `pip install groq`.") from exc
-            self.client = Groq(api_key=self.api_key)
+            self.client = Groq(api_key=self.api_key, timeout=self.timeout_seconds)
 
         return self.client
+
+    @staticmethod
+    def _quick_intent(text: str) -> dict[str, Any] | None:
+        return IntentClassifier._quick_social_intent(text) or IntentClassifier._quick_out_of_scope_intent(text)
+
+    @staticmethod
+    def _quick_social_intent(text: str) -> dict[str, Any] | None:
+        normalized = " ".join(text.lower().strip().split())
+        social_intents = {
+            "hi": "greeting",
+            "hello": "greeting",
+            "hey": "greeting",
+            "hey there": "greeting",
+            "good morning": "greeting",
+            "good afternoon": "greeting",
+            "good evening": "greeting",
+            "how are you": "greeting",
+            "how are you?": "greeting",
+            "are you there": "greeting",
+            "are you there?": "greeting",
+            "thanks": "gratitude",
+            "thank you": "gratitude",
+            "thank you so much": "gratitude",
+            "thanks a lot": "gratitude",
+            "bye": "goodbye",
+            "goodbye": "goodbye",
+            "see you": "goodbye",
+            "see you later": "goodbye",
+            "talk to you later": "goodbye",
+        }
+        intent = social_intents.get(normalized)
+        if not intent or not normalized.isascii():
+            return None
+
+        scores = {name: 0.02 for name in INTENT_NAMES}
+        scores[intent] = 0.92
+        total = sum(scores.values())
+        scores = {name: round(value / total, 4) for name, value in scores.items()}
+        ranked_scores = sorted(scores.values(), reverse=True)
+        return {
+            "intent": intent,
+            "confidence": scores[intent],
+            "confidence_margin": round(ranked_scores[0] - ranked_scores[1], 4),
+            "intent_scores": scores,
+            "reason": "Matched a short English social message locally to reduce latency.",
+            "retrieval_query": "",
+            "contextual_follow_up": False,
+            "interaction_type": "standalone",
+            "classification_skipped": "local_social_intent_fast_path",
+        }
+
+    @staticmethod
+    def _quick_out_of_scope_intent(text: str) -> dict[str, Any] | None:
+        normalized = " ".join(text.lower().strip().split())
+        mental_terms = {
+            "anxiety", "anxious", "panic", "depression", "depressed", "sad", "stress", "stressed",
+            "therapy", "therapist", "trauma", "mood", "sleep", "insomnia", "fear", "angry",
+            "hopeless", "lonely", "self-harm", "suicide", "suicidal", "mental", "emotion",
+        }
+        if any(term in normalized for term in mental_terms):
+            return None
+
+        obvious_patterns = (
+            "write a sql",
+            "write me a sql",
+            "sql query",
+            "python code",
+            "write code",
+            "capital of",
+            "who won",
+            "recommend a laptop",
+            "give me a recipe",
+            "pizza recipe",
+            "summarize this business",
+            "translate this sentence",
+        )
+        if not normalized.isascii() or not any(pattern in normalized for pattern in obvious_patterns):
+            return None
+
+        scores = {name: 0.02 for name in INTENT_NAMES}
+        scores["out_of_scope"] = 0.92
+        total = sum(scores.values())
+        scores = {name: round(value / total, 4) for name, value in scores.items()}
+        ranked_scores = sorted(scores.values(), reverse=True)
+        return {
+            "intent": "out_of_scope",
+            "confidence": scores["out_of_scope"],
+            "confidence_margin": round(ranked_scores[0] - ranked_scores[1], 4),
+            "intent_scores": scores,
+            "reason": "Matched an obvious non-mental-health task locally to reduce latency.",
+            "retrieval_query": "",
+            "contextual_follow_up": False,
+            "interaction_type": "standalone",
+            "classification_skipped": "local_out_of_scope_fast_path",
+        }
 
     @staticmethod
     def _build_user_prompt(text: str, history: list[dict[str, str]]) -> str:
@@ -290,33 +389,53 @@ class IntentClassifier:
                 "interaction_type": "standalone",
             }
 
-        client = self._get_client()
-        completion = client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": self._build_user_prompt(clean_text, history or [])},
-            ],
-            temperature=self.temperature,
-            max_completion_tokens=300,
-            top_p=1,
-            response_format={"type": "json_object"},
-        )
+        quick_intent = self._quick_intent(clean_text)
+        if quick_intent:
+            return quick_intent
 
-        content = completion.choices[0].message.content or "{}"
-        try:
-            return self._normalize(self._parse_json(content), clean_text)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            return {
-                "intent": "out_of_scope",
-                "confidence": 0.0,
-                "confidence_margin": 0.0,
-                "intent_scores": {name: 0.0 for name in INTENT_NAMES},
-                "reason": "The model returned an invalid JSON response.",
-                "retrieval_query": "",
-                "contextual_follow_up": False,
-                "interaction_type": "standalone",
-            }
+        client = self._get_client()
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": self._build_user_prompt(clean_text, history or [])},
+        ]
+        errors = []
+        for model in self._model_candidates():
+            try:
+                completion = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=self.temperature,
+                    max_completion_tokens=300,
+                    top_p=1,
+                    response_format={"type": "json_object"},
+                )
+                content = completion.choices[0].message.content or "{}"
+                prediction = self._normalize(self._parse_json(content), clean_text)
+                prediction["used_model"] = model
+                return prediction
+            except (json.JSONDecodeError, TypeError, ValueError) as error:
+                errors.append(f"{model}: invalid_json:{type(error).__name__}")
+            except Exception as error:
+                errors.append(f"{model}: {type(error).__name__}")
+
+        return {
+            "intent": "out_of_scope",
+            "confidence": 0.0,
+            "confidence_margin": 0.0,
+            "intent_scores": {name: 0.0 for name in INTENT_NAMES},
+            "reason": "Intent classification failed for configured Groq model(s): " + "; ".join(errors),
+            "retrieval_query": "",
+            "contextual_follow_up": False,
+            "interaction_type": "standalone",
+        }
+
+    def _model_candidates(self) -> list[str]:
+        models = [self.model, *self.fallback_models]
+        unique_models = []
+        for model in models:
+            if model and model not in unique_models:
+                unique_models.append(model)
+        return unique_models
 
     def evaluate(self, test_cases: list[tuple[str, str]] = TEST_CASES) -> dict[str, Any]:
         rows = []

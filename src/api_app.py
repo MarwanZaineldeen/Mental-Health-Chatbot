@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import sys
 from functools import lru_cache
+from threading import Thread
 from pathlib import Path
 from typing import Any
 
@@ -46,9 +48,28 @@ def get_pipeline() -> ChatbotPipeline:
     return ChatbotPipeline()
 
 
+def _env_flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _warmup_pipeline() -> None:
+    get_pipeline().warmup(include_retrieval=_env_flag("NURA_WARMUP_RETRIEVAL"))
+
+
+@app.on_event("startup")
+def startup_warmup() -> None:
+    if _env_flag("NURA_WARMUP_ON_START"):
+        Thread(target=_warmup_pipeline, daemon=True).start()
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/warmup")
+def warmup(retrieval: bool = False) -> dict[str, Any]:
+    return get_pipeline().warmup(include_retrieval=retrieval)
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -932,7 +953,7 @@ DEVELOPER_PAGE = r"""
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 12px;
       margin-top: 14px;
     }
@@ -1032,6 +1053,7 @@ DEVELOPER_PAGE = r"""
           <div class="metric"><b>Language</b><span id="language">-</span></div>
           <div class="metric"><b>Emotion</b><span id="emotion">-</span></div>
           <div class="metric"><b>Intent</b><span id="intent">-</span></div>
+          <div class="metric"><b>Total latency</b><span id="latency">-</span></div>
         </div>
 
         <details>
@@ -1050,6 +1072,7 @@ DEVELOPER_PAGE = r"""
     const language = document.getElementById("language");
     const emotion = document.getElementById("emotion");
     const intent = document.getElementById("intent");
+    const latency = document.getElementById("latency");
     const clearHistory = document.getElementById("clearHistory");
     const historyStatus = document.getElementById("historyStatus");
     let history = [];
@@ -1069,6 +1092,7 @@ DEVELOPER_PAGE = r"""
       updateHistoryStatus();
       stateBox.textContent = "{}";
       route.textContent = "Waiting";
+      latency.textContent = "-";
       answer.textContent = "Conversation cleared. Enter a message to run the full pipeline.";
     });
 
@@ -1104,6 +1128,7 @@ DEVELOPER_PAGE = r"""
         language.textContent = `${state.language?.language_name || "-"}${pct(state.language?.confidence)}`;
         emotion.textContent = `${state.emotion?.emotion || "-"}${pct(state.emotion?.confidence)}`;
         intent.textContent = `${state.intent?.intent || "-"}${pct(state.intent?.confidence)}`;
+        latency.textContent = state.timings_ms?.total ? `${state.timings_ms.total} ms` : "-";
         stateBox.textContent = JSON.stringify(state, null, 2);
         history.push({ role: "user", content: message });
         history.push({ role: "assistant", content: data.response || "" });

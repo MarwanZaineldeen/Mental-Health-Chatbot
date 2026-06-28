@@ -1,130 +1,171 @@
----
-title: Mental Health Chatbot
-sdk: docker
-app_port: 7860
----
+﻿# Nura: Mental Health Support Chatbot
 
-# Nura: Mental Health Support Chatbot
+Nura is my end-to-end mental wellness companion: a FastAPI chatbot that combines language detection, emotion classification, intent routing, safety checks, retrieval, and LLM response generation into one usable product.
 
-Nura is your gentle mental wellness companion: an end-to-end mental-health support chatbot built with a modular NLP and RAG architecture. The system detects the user's language, emotion, and intent, applies safety routing, retrieves relevant mental-health context from a Qdrant vector database, and generates a supportive response through Groq.
+The idea is simple: the user should feel heard, get a practical next step, and receive answers grounded in mental-health resources instead of a generic chatbot response.
 
-The project is designed to be explainable, testable, and suitable for a professional portfolio: each module can run independently, produces reports, and is integrated into a FastAPI chatbot interface.
+## What Makes It Different
 
-## What The System Does
+- Modular pipeline instead of one opaque prompt.
+- Language, emotion, and intent are detected separately and exposed in the developer UI.
+- RAG is only used when the message is actually mental-health related.
+- Qdrant Cloud stores two knowledge sources and supports source filtering.
+- The final LLM reviews earlier model outputs before answering.
+- Crisis-like messages bypass normal RAG and return immediate support guidance.
+- Production UI is branded as Nura with light/dark mode, saved chats, and clickable follow-up suggestions.
+- Developer UI makes the full pipeline easy to inspect and demo.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    User[User] --> UI[Nura Web UI]
+    UI --> API[FastAPI /chat]
+
+    API --> Pipeline[ChatbotPipeline]
+    Pipeline --> Safety[Safety Router]
+
+    Pipeline --> Lang[Module 1\nLanguage Detector]
+    Pipeline --> Emotion[Module 2\nEmotion Classifier]
+    Pipeline --> Intent[Module 3\nGroq Intent Classifier]
+
+    Intent -->|mental-health question| Embed[E5 Multilingual Embeddings]
+    Embed --> Qdrant[(Qdrant Cloud)]
+    Qdrant --> Context[Retrieved Context]
+
+    Lang --> Generator[Groq Response Generator]
+    Emotion --> Generator
+    Intent --> Generator
+    Context --> Generator
+    Safety -->|crisis| Crisis[Crisis Guidance]
+
+    Generator --> API
+    Crisis --> API
+    API --> UI
+```
+
+## Pipeline Flow
 
 ```text
 User message
-  -> Language detection
-  -> Emotion classification
-  -> Safety guardrail
-  -> Context-aware intent classification
-  -> RAG retrieval when needed
-  -> LLM response generation
-  -> Same-language supportive answer
+  -> crisis check
+  -> language + emotion + intent in parallel
+  -> retrieval only if intent is asking_mental_health_question
+  -> final LLM review of language, emotion, and intent
+  -> same-language supportive answer
 ```
 
-Key features:
-
-- Multilingual language detection with confidence scores.
-- Transformer-based emotion classification with word-level explainability.
-- Context-aware LLM intent routing with five-class score distributions.
-- Crisis-aware guardrail that bypasses normal RAG when urgent risk is detected.
-- RAG retrieval over two mental-health knowledge sources.
-- Qdrant Cloud vector database with source filtering.
-- E5 multilingual embeddings for cross-lingual retrieval.
-- FastAPI backend with a branded Nura production UI, light/dark mode, local saved chats, and a developer testing UI.
-- Context-aware follow-up routing using recent browser-session history.
-- Final LLM review of language, emotion, and intent predictions.
-- Clean reports for every major module.
+For simple English greetings, thanks, goodbyes, and obvious standalone out-of-scope tasks, Nura uses a fast direct response and skips final LLM generation. This keeps casual turns responsive while preserving the full RAG flow for real support questions.
 
 ## Modules
 
-### Module 1: Language Detection
+### Module 1 - Language Detection
 
 - Dataset: `papluca/language-identification`
-- Model: character-level TF-IDF with Multinomial Naive Bayes
-- Supported languages: 20 languages including English, Arabic, French, Spanish, German, Chinese, Japanese, Hindi, Urdu, and others
-- Report folder: `reports/module_1_language_detection/`
+- Model: character TF-IDF + Multinomial Naive Bayes
+- Output: language code, language name, confidence, confidence flag
+- Report: `reports/module_1_language_detection/`
 
-Run:
-
-```powershell
-.\.venv\Scripts\python.exe src\data\fetch_language_data.py
-.\.venv\Scripts\python.exe src\models\language_classifier.py
-.\.venv\Scripts\python.exe src\models\language_detector_ui.py
-```
-
-### Module 2: Emotion Classification
+### Module 2 - Emotion Classification
 
 - Dataset: `dair-ai/emotion`
 - Model: fine-tuned `distilbert-base-uncased`
 - Labels: sadness, joy, love, anger, fear, surprise
 - Explainability: word-occlusion impact scores
-- Report folder: `reports/module_2_emotion_classification/`
+- Report: `reports/module_2_emotion_classification/`
 
-The trained model folder is intentionally ignored by Git:
+The trained model folder is intentionally not committed:
 
 ```text
 src/models/saved_emotion_model/
 ```
 
-Run:
-
-```powershell
-.\.venv\Scripts\python.exe src\models\emotion_classifier.py "I feel anxious and overwhelmed" --explain
-.\.venv\Scripts\python.exe src\models\emotion_detector_ui.py
-```
-
-### Module 3: Intent Classification
+### Module 3 - Intent Classification
 
 - Model: Groq `llama-3.1-8b-instant`
-- Method: few-shot classification prompt with strict JSON parsing
+- Method: few-shot JSON classification
 - Intents: greeting, goodbye, gratitude, asking_mental_health_question, out_of_scope
-- Report folder: `reports/module_3_intent_classification/`
+- Report: `reports/module_3_intent_classification/`
 
-Run:
-
-```powershell
-.\.venv\Scripts\python.exe src\models\intent_classifier.py "I feel anxious every night"
-.\.venv\Scripts\python.exe src\models\intent_classifier.py --evaluate
-.\.venv\Scripts\python.exe src\models\intent_detector_ui.py
-```
-
-### Module 4: RAG Retrieval
+### Module 4 - RAG Retrieval
 
 Knowledge sources:
 
-- `cci`: Centre for Clinical Interventions information sheets, cleaned from PDFs and grouped into structure-aware chunks of at most 400 words.
-- `amod`: cleaned counseling Q&A pairs from `Amod/mental_health_counseling_conversations`.
+- `cci`: Centre for Clinical Interventions information sheets, cleaned from PDFs into structure-aware chunks up to 400 words.
+- `amod`: cleaned Q&A records from `Amod/mental_health_counseling_conversations`.
 
 Retrieval stack:
 
 - Embedding model: `intfloat/multilingual-e5-base`
 - Vector database: Qdrant Cloud
-- Collection: `mental_health_rag_v2`
-- Retrieval modes:
-  - `both`: Balanced Support
-  - `cci`: Educational Guidance
-  - `amod`: Counseling Style
+- Production collection: `mental_health_rag_v2`
+- Previous comparison collection: `mental_health_rag`
 
-Build corpora and vector index:
+Retrieval modes:
+
+- `both`: Balanced Care
+- `cci`: Learn and Cope
+- `amod`: Reflective Talk
+
+## User Interfaces
+
+Production UI at `/`:
+
+- Nura branding
+- light/dark theme
+- local saved chats
+- support style switching
+- clickable suggested questions only for mental-health support answers
+
+Developer UI at `/developer`:
+
+- full pipeline state
+- language, emotion, and intent outputs
+- retrieval source switching
+- top-k control
+- vector index switching between `mental_health_rag_v2` and `mental_health_rag`
+
+## Evaluation And Reports
+
+The repository includes reports for model quality, data processing, retrieval, and integrated chatbot behavior:
+
+- `reports/module_1_language_detection/`
+- `reports/module_2_emotion_classification/`
+- `reports/module_3_intent_classification/`
+- `reports/module_4_rag_retrieval/`
+- `reports/integrated_chatbot/`
+
+The integrated chatbot edge-case report currently passes 12/12 cases, including follow-up messages, mixed-scope queries, multilingual stress input, crisis routing, and out-of-scope requests.
+
+## Running Locally
+
+Install dependencies:
 
 ```powershell
-.\.venv\Scripts\python.exe src\retrieval\build_cci_corpus.py
-.\.venv\Scripts\python.exe src\retrieval\build_amod_qa_corpus.py
-.\.venv\Scripts\python.exe src\retrieval\build_vector_index.py --recreate
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Test retrieval:
+Create `.env` from `.env.example` and set:
 
-```powershell
-.\.venv\Scripts\python.exe src\retrieval\retrieval_engine.py "I feel anxious and cannot sleep" --source both --top-k 8
-.\.venv\Scripts\python.exe src\retrieval\retrieval_tester_ui.py
+```text
+GROQ_API_KEY=your_groq_api_key_here
+LANGUAGE_MODEL_REPO_ID=your_hf_username/language-detector-model
+LANGUAGE_MODEL_FILENAME=saved_lang_model.pkl
+EMOTION_MODEL_ID=your_hf_username/emotion-detector-model
+QDRANT_URL=https://your-qdrant-cluster-url
+QDRANT_API_KEY=your_qdrant_api_key_here
+QDRANT_COLLECTION=mental_health_rag_v2
+EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-base
+GROQ_RESPONSE_MAX_TOKENS=400
+GROQ_INTENT_FALLBACK_MODELS=openai/gpt-oss-20b
+GROQ_RESPONSE_FALLBACK_MODELS=openai/gpt-oss-20b
+GROQ_REQUEST_TIMEOUT_SECONDS=12
+TORCH_NUM_THREADS=1
+NURA_WARMUP_ON_START=false
+NURA_WARMUP_RETRIEVAL=false
 ```
 
-## FastAPI Chatbot
-
-Run the integrated chatbot:
+Start the app:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn src.api_app:app --host 127.0.0.1 --port 8000
@@ -136,111 +177,43 @@ Open:
 http://127.0.0.1:8000
 ```
 
-Available pages:
+## Useful Commands
 
-- `/` production chatbot UI
-- `/developer` developer UI with pipeline state and vector index switching
-- `/docs` FastAPI API documentation
-
-API endpoints:
-
-- `GET /health`
-- `POST /chat`
-
-Example request:
-
-```json
-{
-  "message": "I feel anxious every night and cannot sleep",
-  "source": "both",
-  "top_k": 8,
-  "history": []
-}
-```
-
-## Environment Setup
-
-Install dependencies:
+Run intent evaluation:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe src\models\intent_classifier.py --evaluate
 ```
 
-Create a local `.env` file from `.env.example`:
+Test retrieval:
 
-```text
-GROQ_API_KEY=your_groq_api_key_here
-LANGUAGE_MODEL_REPO_ID=your_hf_username/language-detector-model
-LANGUAGE_MODEL_FILENAME=saved_lang_model.pkl
-EMOTION_MODEL_ID=your_hf_username/emotion-detector-model
-QDRANT_URL=https://your-cluster-url.qdrant.tech
-QDRANT_API_KEY=your_qdrant_api_key_here
-QDRANT_COLLECTION=mental_health_rag_v2
-EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-base
-EMBEDDING_BATCH_SIZE=2
-TORCH_NUM_THREADS=1
+```powershell
+.\.venv\Scripts\python.exe src\retrieval\retrieval_engine.py "I feel anxious and cannot sleep" --source both --top-k 8
 ```
 
-The real `.env` file is ignored by Git and should never be committed.
+Compare retrieval indexes:
 
-## Repository Structure
-
-```text
-src/
-  api_app.py
-  data/
-    fetch_language_data.py
-  models/
-    language_classifier.py
-    emotion_classifier.py
-    intent_classifier.py
-    chatbot_pipeline.py
-    safety_router.py
-    response_generator.py
-  retrieval/
-    build_cci_corpus.py
-    build_amod_qa_corpus.py
-    embedding_model.py
-    build_vector_index.py
-    retrieval_engine.py
-
-notebooks/
-  module_1_language_detection.ipynb
-  module_2_emotion_training.ipynb
-  module_3_intent_classification.ipynb
-  module_4_amod_dataset_exploration.ipynb
-
-reports/
-  module_1_language_detection/
-  module_2_emotion_classification/
-  module_3_intent_classification/
-  module_4_rag_retrieval/
-  integrated_chatbot/
+```powershell
+.\.venv\Scripts\python.exe src\evaluation\compare_retrieval_chunking.py
 ```
 
-## Reports
+Run integrated chatbot edge cases:
 
-Each module writes its own evaluation or data-preparation report:
+```powershell
+.\.venv\Scripts\python.exe src\evaluation\test_chatbot_edge_cases.py
+```
 
-- Language metrics and confusion matrices.
-- Emotion classification metrics and explanation examples.
-- Intent test cases and accuracy summary.
-- CCI corpus summary, Amod dataset summary, Qdrant index summary, and chunking comparison report.
-- Integrated chatbot edge-case report for continued chat, mixed-scope queries, multilingual inputs, crisis routing, and suggested questions.
+Benchmark integrated chatbot latency:
 
-These reports make the project easier to review, debug, and present.
+```powershell
+.\.venv\Scripts\python.exe src\evaluation\benchmark_chatbot_latency.py --repeat 1 --source both --top-k 8
+```
 
-## Deployment Notes
+## Deployment
 
-The current app runs locally through FastAPI and is prepared for a Hugging Face Docker Space.
+The Dockerfile uses the platform `PORT` environment variable. It defaults to `7860` for Hugging Face Spaces, while Render can still inject its own `PORT`. Secrets are expected to come from the hosting provider environment, not from Git.
 
-See `DEPLOYMENT.md` for the full Hugging Face Spaces checklist.
-
-Recommended Hugging Face Space setup:
-
-1. Create a new Space with `Docker` as the SDK.
-2. Push this repository content to the Space repository.
-3. Add the required secrets in the Space settings:
+Required deployment variables:
 
 ```text
 GROQ_API_KEY
@@ -250,21 +223,14 @@ QDRANT_COLLECTION
 LANGUAGE_MODEL_REPO_ID
 LANGUAGE_MODEL_FILENAME
 EMOTION_MODEL_ID
+GROQ_RESPONSE_MAX_TOKENS
+GROQ_INTENT_FALLBACK_MODELS
+GROQ_RESPONSE_FALLBACK_MODELS
+GROQ_REQUEST_TIMEOUT_SECONDS
+NURA_WARMUP_ON_START
+NURA_WARMUP_RETRIEVAL
 ```
-
-The Dockerfile runs:
-
-```text
-uvicorn src.api_app:app --host 0.0.0.0 --port 7860
-```
-
-Model artifact policy:
-
-- Upload `saved_lang_model.pkl` to a Hugging Face model repository and set `LANGUAGE_MODEL_REPO_ID`.
-- Upload the trained `saved_emotion_model/` files to another Hugging Face model repository and set `EMOTION_MODEL_ID`.
-- Keep API keys, model secrets, local data, and local caches outside Git.
-- Keep the production UI at `/` and the developer UI at `/developer`.
 
 ## Safety Note
 
-This chatbot is for educational and supportive use only. It does not diagnose, replace therapy, prescribe treatment, or handle emergencies as a clinical service. Crisis-like messages are routed to immediate-support guidance and should encourage contacting local emergency services or crisis resources.
+Nura is an educational and supportive project. It does not diagnose, prescribe treatment, replace therapy, or handle emergencies as a clinical service. Crisis-like messages are routed to immediate-support guidance and should encourage contacting local emergency services or trusted support.

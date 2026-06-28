@@ -9,6 +9,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL = "llama-3.1-8b-instant"
+DEFAULT_FALLBACK_MODEL = "openai/gpt-oss-20b"
 EMOTION_LABELS = {"sadness", "joy", "love", "anger", "fear", "surprise"}
 INTENT_LABELS = {"greeting", "goodbye", "gratitude", "asking_mental_health_question", "out_of_scope"}
 
@@ -32,6 +33,10 @@ class ResponseGenerator:
         self.model = model
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.client = None
+        self.max_tokens = int(os.getenv("GROQ_RESPONSE_MAX_TOKENS", "400"))
+        self.timeout_seconds = float(os.getenv("GROQ_REQUEST_TIMEOUT_SECONDS", "12"))
+        fallback_models = os.getenv("GROQ_RESPONSE_FALLBACK_MODELS", DEFAULT_FALLBACK_MODEL)
+        self.fallback_models = [model.strip() for model in fallback_models.split(",") if model.strip()]
 
     def _get_client(self) -> Any:
         if not self.api_key:
@@ -40,7 +45,7 @@ class ResponseGenerator:
         if self.client is None:
             from groq import Groq
 
-            self.client = Groq(api_key=self.api_key)
+            self.client = Groq(api_key=self.api_key, timeout=self.timeout_seconds)
 
         return self.client
 
@@ -50,18 +55,35 @@ class ResponseGenerator:
             {"role": "system", "content": self._system_prompt()},
             {"role": "user", "content": self._user_prompt(state)},
         ]
-        completion = client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=0.4,
-            max_completion_tokens=600,
-            top_p=0.9,
-            response_format={"type": "json_object"},
-        )
-        content = completion.choices[0].message.content or "{}"
-        result = self._parse_response(content)
-        self._enforce_review_labels(result, state)
-        return result
+
+        errors = []
+        for model in self._model_candidates():
+            try:
+                completion = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.4,
+                    max_completion_tokens=self.max_tokens,
+                    top_p=0.9,
+                    response_format={"type": "json_object"},
+                )
+                content = completion.choices[0].message.content or "{}"
+                result = self._parse_response(content)
+                result["used_model"] = model
+                self._enforce_review_labels(result, state)
+                return result
+            except Exception as error:
+                errors.append(f"{model}: {type(error).__name__}")
+
+        raise RuntimeError("Response generation failed for configured Groq model(s): " + "; ".join(errors))
+
+    def _model_candidates(self) -> list[str]:
+        models = [self.model, *self.fallback_models]
+        unique_models = []
+        for model in models:
+            if model and model not in unique_models:
+                unique_models.append(model)
+        return unique_models
 
     @staticmethod
     def _enforce_review_labels(result: dict[str, Any], state: dict[str, Any]) -> None:

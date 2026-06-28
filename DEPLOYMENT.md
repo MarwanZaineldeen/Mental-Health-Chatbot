@@ -1,53 +1,10 @@
-# Hugging Face Spaces Deployment
+﻿# Deployment Notes
 
-This project is prepared for deployment as a Hugging Face Docker Space.
+Nura is container-ready through the project Dockerfile. The container reads the hosting platform `PORT` environment variable and falls back to `7860`, the default Hugging Face Docker Space port.
 
-## 1. Login Locally
+## Required Secrets
 
-Run:
-
-```powershell
-.\.venv\Scripts\hf.exe auth login
-```
-
-Use a Hugging Face token with write access.
-
-## 2. Upload Model Artifacts
-
-Create two Hugging Face model repositories:
-
-```text
-your_username/mental-health-language-detector
-your_username/mental-health-emotion-detector
-```
-
-Upload:
-
-- `src/models/saved_lang_model.pkl` to the language model repository.
-- All files inside `src/models/saved_emotion_model/` to the emotion model repository.
-
-The emotion model folder should contain:
-
-```text
-config.json
-model.safetensors
-tokenizer.json
-tokenizer_config.json
-```
-
-## 3. Create The Space
-
-Create a Hugging Face Space:
-
-```text
-SDK: Docker
-Visibility: Public or Private
-App port: 7860
-```
-
-## 4. Add Space Secrets
-
-In the Space settings, add:
+Set these in Render, Hugging Face Spaces, or any other hosting platform:
 
 ```text
 GROQ_API_KEY
@@ -65,23 +22,78 @@ Recommended values:
 LANGUAGE_MODEL_FILENAME=saved_lang_model.pkl
 QDRANT_COLLECTION=mental_health_rag_v2
 EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-base
-EMBEDDING_BATCH_SIZE=2
+GROQ_RESPONSE_MAX_TOKENS=400
+GROQ_INTENT_FALLBACK_MODELS=openai/gpt-oss-20b
+GROQ_RESPONSE_FALLBACK_MODELS=openai/gpt-oss-20b
+GROQ_REQUEST_TIMEOUT_SECONDS=12
 TORCH_NUM_THREADS=1
+NURA_WARMUP_ON_START=false
+NURA_WARMUP_RETRIEVAL=false
 ```
 
-## 5. Push To The Space Repo
 
-After the Space is created, add it as a Git remote:
+## Latency Settings
+
+For Hugging Face Spaces or Render, the most useful latency controls are:
+
+- Keep the Space/app warm before a demo. Cold starts are usually slower than normal requests.
+- Use the production UI for users and `/developer` only for debugging, because the developer page returns full pipeline state.
+- Keep `GROQ_RESPONSE_MAX_TOKENS` around `400` unless you need longer answers.
+- Set `GROQ_INTENT_FALLBACK_MODELS` and `GROQ_RESPONSE_FALLBACK_MODELS` to another reliable Groq model such as `openai/gpt-oss-20b`. Use comma-separated lists if you want more than one fallback.
+- `GROQ_REQUEST_TIMEOUT_SECONDS=12` stops one slow Groq call from blocking the whole request for too long before trying a fallback.
+- `EMBEDDING_BATCH_SIZE` mainly matters when building indexes or embedding multiple texts. It does not speed up a single user query much.
+- The app already runs language, emotion, and intent analysis in parallel.
+
+Latency can be measured with:
 
 ```powershell
-git remote add space https://huggingface.co/spaces/your_username/your_space_name
-git push space main
+.\.venv\Scripts\python.exe src\evaluation\benchmark_chatbot_latency.py --repeat 1 --source both --top-k 8
 ```
 
-The Dockerfile starts the production app with:
+The report is saved under `reports/integrated_chatbot/latency_benchmark.*`.
+
+## Warmup Strategy
+
+The app exposes `/warmup`. Calling it loads the cached chatbot pipeline before the first real chat request. Use `/warmup?retrieval=true` when you also want to initialize the E5 retrieval model and Qdrant search path.
+
+For demos, you can set:
 
 ```text
-uvicorn src.api_app:app --host 0.0.0.0 --port 7860
+NURA_WARMUP_ON_START=true
+NURA_WARMUP_RETRIEVAL=false
 ```
 
-Open the Space URL after the build finishes.
+Keep retrieval warmup disabled on small free hardware unless you need the first RAG question to be faster, because loading E5 during startup uses more RAM and can slow the Space wake-up.
+
+## Model Artifacts
+
+Keep model artifacts outside Git:
+
+- Upload `saved_lang_model.pkl` to a Hugging Face model repository.
+- Upload the trained `saved_emotion_model/` folder to another Hugging Face model repository.
+- Point the app to those repositories with `LANGUAGE_MODEL_REPO_ID` and `EMOTION_MODEL_ID`.
+
+## Render Notes
+
+Use the Docker runtime. Render injects `PORT`, so the same Dockerfile can run there without changing the code:
+
+```text
+uvicorn src.api_app:app --host 0.0.0.0 --port $PORT
+```
+
+## Hugging Face Space Notes
+
+Use a Docker Space and add the same secrets in Space settings. If the Space uses a custom repo name such as `Nura`, push the same project files to that Space remote.
+
+## Local Container Test
+
+```powershell
+docker build -t nura .
+docker run --env-file .env -p 7860:7860 nura
+```
+
+Then open:
+
+```text
+http://127.0.0.1:7860
+```
