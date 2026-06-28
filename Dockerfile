@@ -18,6 +18,6 @@ RUN pip install --upgrade pip \
 
 COPY . .
 
-EXPOSE 7860
+EXPOSE 10000
 
-CMD ["uvicorn", "src.api_app:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["sh", "-c", "uvicorn src.api_app:app --host 0.0.0.0 --port ${PORT:-10000}"]
